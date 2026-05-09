@@ -1,0 +1,524 @@
+{
+  "name": "Benza Resume screener v1",
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "documentId": {
+          "__rl": true,
+          "value": "https://docs.google.com/spreadsheets/d/1xNJ1mPYy83fgecvGEzhf6iUzytXDO5cRPspamcpHDeY/edit?resourcekey=&gid=919107142#gid=919107142",
+          "mode": "url"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 919107142,
+          "mode": "list",
+          "cachedResultName": "Form responses 1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1xNJ1mPYy83fgecvGEzhf6iUzytXDO5cRPspamcpHDeY/edit#gid=919107142"
+        },
+        "event": "rowAdded",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheetsTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "31b3d9db-6618-40c7-b827-4e2f73c7310f",
+      "name": "Google Sheets Trigger",
+      "credentials": {
+        "googleSheetsTriggerOAuth2Api": {
+          "id": "5sy1bWA2WwYploQU",
+          "name": "Google Sheets Trigger account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "models/gemini-3-flash-preview"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=You are a resume parser. Extract the following information from the resume details below and respond in ONLY this exact JSON format, nothing else:\n\n{\n  \"name\": \"candidate name\",\n  \"email\": \"candidate email\",\n  \"job_role\": \"job role applying for\",\n  \"skills\": [\"skill1\", \"skill2\"],\n  \"years_of_experience\": \"number or fresher\",\n  \"experience_description\": \"brief summary of experience\",\n  \"projects\": \"brief summary of projects\",\n  \"education\": \"degree and institution\"\n}\n\nCandidate Details:\nName: {{ $json['Full Name'] }}\nEmail: {{ $json['Email Address'] }}\nJob Role: {{ $json['Job Applying for (Python Developer or Data Analyst)'] }}\nSkills: {{ $json['Your skills (eg: Python, SQL, Power BI)'] }}\nExperience: {{ $json['Work Experience (Describe your experience)'] }}\nProjects: {{ $json['Projects'] }}\nEducation: {{ $json['Education (Degree)'] }}"
+            }
+          ]
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1.2,
+      "position": [
+        208,
+        0
+      ],
+      "id": "6e4b3d89-dfeb-4a51-84b7-c63b5ec4b7a2",
+      "name": "Gemini Extractor",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "j5fq4zhur0q1QhNI",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "models/gemini-3-flash-preview"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=You are an expert HR resume evaluator for Benza company.\n\nEvaluate the following candidate resume against the job description and score each criteria strictly.\n\nJob Description:\nWe are looking for a skilled developer with the following requirements:\n- Strong programming skills in Python, SQL or relevant technologies\n- Minimum 1+ years of work experience (freshers with strong projects will be considered)\n- Demonstrated projects showing real world problem solving\n- Relevant educational background in Computer Science or related field\n\nCandidate Details:\nName: {{ $('Google Sheets Trigger').item.json['Full Name'] }}\nJob Role Applying For: {{ $('Google Sheets Trigger').item.json['Job Applying for (Python Developer or Data Analyst)'] }}\nSkills: {{ $('Google Sheets Trigger').item.json['Your skills (eg: Python, SQL, Power BI)'] }}\nExperience: {{ $('Google Sheets Trigger').item.json['Work Experience (Describe your experience)'] }}\nProjects: {{ $('Google Sheets Trigger').item.json['Projects'] }}\nEducation: {{ $('Google Sheets Trigger').item.json['Education (Degree)'] }}\n\nScore each criteria and respond in ONLY this exact format, nothing else:\n\nskills_score: <0-40>\nexperience_score: <0-30>\nprojects_score: <0-20>\neducation_score: <0-10>\ntotal_score: <0-100>\ndecision: <Strong/Average/Weak>\nreason: <one sentence explanation>"
+            }
+          ]
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1.2,
+      "position": [
+        560,
+        0
+      ],
+      "id": "65cbcbdd-3572-409b-9b41-2eea16c158d9",
+      "name": "Gemini Scorer",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "j5fq4zhur0q1QhNI",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const extractorText = $('Gemini Extractor').item.json.content.parts[0].text;\nconst scorerText = $('Gemini Scorer').item.json.content.parts[0].text;\n\n// Parse extractor JSON output\nlet extracted = {};\ntry {\n  const clean = extractorText.replace(/```json|```/g, '').trim();\n  extracted = JSON.parse(clean);\n} catch(e) {\n  extracted = {\n    name: $('Google Sheets Trigger').item.json['Full Name'],\n    email: $('Google Sheets Trigger').item.json['Email Address'],\n    job_role: $('Google Sheets Trigger').item.json['Job Applying for (Python Developer or Data Analyst)'],\n    skills: $('Google Sheets Trigger').item.json['Your skills (eg: Python, SQL, Power BI)'],\n    years_of_experience: 'unknown',\n    projects: $('Google Sheets Trigger').item.json['Projects'],\n    education: $('Google Sheets Trigger').item.json['Education (Degree)']\n  };\n}\n\n// Parse scorer output\nconst lines = scorerText.split('\\n');\nconst getValue = (key) => {\n  const line = lines.find(l => l.startsWith(key));\n  return line ? line.split(':')[1].trim() : '0';\n};\n\nconst skillsScore = getValue('skills_score');\nconst experienceScore = getValue('experience_score');\nconst projectsScore = getValue('projects_score');\nconst educationScore = getValue('education_score');\nconst totalScore = getValue('total_score');\nconst decision = getValue('decision');\nconst reason = getValue('reason');\n\nreturn {\n  json: {\n    name: extracted.name,\n    email: extracted.email,\n    job_role: extracted.job_role,\n    skills: Array.isArray(extracted.skills) ? extracted.skills.join(', ') : extracted.skills,\n    years_of_experience: extracted.years_of_experience,\n    experience_description: extracted.experience_description,\n    projects: extracted.projects,\n    education: extracted.education,\n    skills_score: skillsScore,\n    experience_score: experienceScore,\n    projects_score: projectsScore,\n    education_score: educationScore,\n    total_score: totalScore,\n    decision: decision,\n    reason: reason,\n    timestamp: new Date().toISOString()\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        0
+      ],
+      "id": "3fd25401-461a-4674-8572-fdf4355d7fa5",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "ab57afc1-7885-4fc7-9383-dea7eb39ed24",
+              "leftValue": "={{ $json.decision }}",
+              "rightValue": "Strong",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "9fc764fd-be62-447a-9cbd-6a5186ebd17c",
+              "leftValue": "={{ $json.decision }}",
+              "rightValue": "Average",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1072,
+        0
+      ],
+      "id": "7dc282f9-6a2c-419c-98b1-fdb803a753e9",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $('Google Sheets Trigger').item.json['Email Address'] }}",
+        "subject": "Your Application at Benza — Update",
+        "emailType": "text",
+        "message": "= Hi {{ $('Google Sheets Trigger').item.json['Full Name'] }},\nThank you for applying for the position {{ $('Code in JavaScript').item.json.job_role }} at Benza.  We are pleased to inform you that your profile has been shortlisted for the next round of our selection process.  Our HR team will be in touch with you shortly regarding the next steps.  We look forward to speaking with you!  \nBest regards, \nBenza HR Team",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1312,
+        -112
+      ],
+      "id": "7d695a3c-5391-4296-befc-783a78eca2d7",
+      "name": "selected",
+      "webhookId": "43baf9c4-3ba6-4a7a-8a38-d2815bb04e8c",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "oSEJsWM0CPNa77vi",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.email }}",
+        "subject": "Your Application at Benza — Update",
+        "emailType": "text",
+        "message": "=Hi {{ $json.name }},\nThank you for applying for the {{ $json.job_role }} position at Benza.  After carefully reviewing your profile, we regret to inform you that we will not be moving forward with your application at this time.  We appreciate your interest in Benza and encourage you to apply again in the future. \nBest regards, \nBenza HR Team",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1312,
+        64
+      ],
+      "id": "db1ec05c-0f3b-4ee1-a6b6-3a8b8e3bb517",
+      "name": "not selected",
+      "webhookId": "43baf9c4-3ba6-4a7a-8a38-d2815bb04e8c",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "oSEJsWM0CPNa77vi",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "https://docs.google.com/spreadsheets/d/1xNJ1mPYy83fgecvGEzhf6iUzytXDO5cRPspamcpHDeY/edit?resourcekey=&gid=919107142#gid=919107142",
+          "mode": "url"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 919107142,
+          "mode": "list",
+          "cachedResultName": "Form responses 1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1xNJ1mPYy83fgecvGEzhf6iUzytXDO5cRPspamcpHDeY/edit#gid=919107142"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Email Address": "={{ $('If').item.json.email }}",
+            "Skill score": "={{ $('Code in JavaScript').item.json.skills_score }}",
+            "Experience score": "={{ $('Code in JavaScript').item.json.experience_score }}",
+            "Projects score": "={{ $('Code in JavaScript').item.json.projects_score }}",
+            "Total Score": "={{ $('Code in JavaScript').item.json.total_score }}",
+            "Education score": "={{ $('Code in JavaScript').item.json.education_score }}",
+            "Reason": "={{ $('Code in JavaScript').item.json.reason }}"
+          },
+          "matchingColumns": [
+            "Email Address"
+          ],
+          "schema": [
+            {
+              "id": "Timestamp",
+              "displayName": "Timestamp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Full Name",
+              "displayName": "Full Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Email Address",
+              "displayName": "Email Address",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Job Applying for (Python Developer or Data Analyst)",
+              "displayName": "Job Applying for (Python Developer or Data Analyst)",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Your skills (eg: Python, SQL, Power BI)",
+              "displayName": "Your skills (eg: Python, SQL, Power BI)",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Work Experience (Describe your experience)",
+              "displayName": "Work Experience (Describe your experience)",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Projects",
+              "displayName": "Projects",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Education (Degree)",
+              "displayName": "Education (Degree)",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Skill score",
+              "displayName": "Skill score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Experience score",
+              "displayName": "Experience score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Projects score",
+              "displayName": "Projects score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Education score",
+              "displayName": "Education score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Total Score",
+              "displayName": "Total Score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Reason",
+              "displayName": "Reason",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "threadId",
+              "displayName": "threadId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "labelIds",
+              "displayName": "labelIds",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1632,
+        0
+      ],
+      "id": "b3d83e25-35b7-498e-89de-cc32c58850ba",
+      "name": "Append or update row in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "mNYntve9xoUsGR50",
+          "name": "Google Sheets account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Google Sheets Trigger": {
+      "main": [
+        [
+          {
+            "node": "Gemini Extractor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini Extractor": {
+      "main": [
+        [
+          {
+            "node": "Gemini Scorer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini Scorer": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "selected",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "not selected",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "selected": {
+      "main": [
+        [
+          {
+            "node": "Append or update row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "not selected": {
+      "main": [
+        [
+          {
+            "node": "Append or update row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "572db8e4-466e-4c58-a6aa-6a370f0e4e8a",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "d9628a7c9b8b37e7f4afb82f640072066ba67a6062fc3aee9b1044f6d9d77c34"
+  },
+  "id": "Kvw40byGPnaB7xif",
+  "tags": []
+}
